@@ -10,17 +10,16 @@ NUM_LEDS = 60
 
 # ---- tuning knobs (adjust these to taste) ----
 BRIGHTNESS_MAX = 0.5      # overall cap; raise for brighter, lower for dimmer
-GAMMA = 2.2              # was 2.8 — gentler so dark colors survive
-BLACK_FLOOR = 6           # min brightness per channel; keeps dark scenes faintly lit (0 = true off)
+GAMMA = 1.5               # gentler gamma so dark colors survive
+BLACK_FLOOR = 6           # min brightness for dark pixels (applied by overall brightness, not per-channel)
 SMOOTHING = 0.3           # transition speed: lower = smoother/slower, higher = snappier (0..1)
 FRAME_DELAY = 0.02        # ~50 fps target
 
-# gamma+brightness lookup table, then lift the floor so darks aren't crushed
+# gamma + brightness lookup table (NO per-channel floor here - that caused
+# dark colors like brown/orange to flatten toward white)
 gamma_table = []
 for i in range(256):
     v = int(((i / 255.0) ** GAMMA) * 255 * BRIGHTNESS_MAX)
-    if v < BLACK_FLOOR and i > 0:      # only floor actual color, leave pure 0 alone-ish
-        v = BLACK_FLOOR
     gamma_table.append(v)
 full_table = gamma_table * 3           # apply same curve to R, G, B
 
@@ -40,11 +39,11 @@ with mss() as sct:
         # 2. shrink to one pixel per LED (NEAREST is fast)
         tiny = img.resize((NUM_LEDS, 1), Image.Resampling.NEAREST)
 
-        # 3. gamma + brightness + black floor
+        # 3. gamma + brightness
         corrected = tiny.point(full_table)
         target_pixels = list(corrected.getdata())   # list of (r,g,b) targets
 
-        # 4. ease current colors toward targets, then pack as GRB for WS2812B
+        # 4. ease current colors toward targets, floor by brightness, pack for strip
         out = bytearray()
         for i in range(NUM_LEDS):
             tr, tg, tb = target_pixels[i]
@@ -52,7 +51,14 @@ with mss() as sct:
             current[i][1] += (tg - current[i][1]) * SMOOTHING
             current[i][2] += (tb - current[i][2]) * SMOOTHING
             r = int(current[i][0]); g = int(current[i][1]); b = int(current[i][2])
-            out += bytes((r, g, b))    # WS2812B wants GRB order
+
+            # lift dark pixels while preserving color ratio (keeps brown/orange from washing to white)
+            peak = max(r, g, b)
+            if 0 < peak < BLACK_FLOOR:
+                scale = BLACK_FLOOR / peak
+                r = int(r * scale); g = int(g * scale); b = int(b * scale)
+
+            out += bytes((r, g, b))    # plain RGB; ESP32's neopixel library handles GRB internally
 
         # 5. send with SYNC header
         esp32.write(b'SYNC' + out)
