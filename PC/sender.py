@@ -10,7 +10,7 @@ NUM_LEDS = 60
 
 # ---- tuning knobs (adjust these to taste) ----
 BRIGHTNESS_MAX = 0.5      # overall cap; raise for brighter, lower for dimmer
-GAMMA = 1.5               # gentler gamma so dark colors survive
+GAMMA = 2.2               # gentler gamma so dark colors survive
 BLACK_FLOOR = 6           # min brightness for dark pixels (applied by overall brightness, not per-channel)
 SMOOTHING = 0.3           # transition speed: lower = smoother/slower, higher = snappier (0..1)
 FRAME_DELAY = 0.02        # ~50 fps target
